@@ -1,16 +1,3 @@
-import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { LanggraphService } from './services/langgraph.service';
-import { UploadService } from './services/upload.service';
-import { AskQuestionDto, QueryResponseDto } from './dto/cricket.dto';
-
-@Controller('cricket')
-export class CricketController {
-  constructor(
-    private readonly langgraphService: LanggraphService,
-    private readonly uploadService: UploadService,
-  ) {}
-
 import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param, HttpException, HttpStatus } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { LanggraphService } from './services/langgraph.service';
