@@ -23,7 +23,8 @@ async function bootstrap() {
   const port = process.env.PORT || 3001;
   await app.listen(port);
   
-  console.log(`🚀 Cricket Data Agent Backend running on http://localhost:${port}`);
+  console.log(`🚀 Cricket Data Agent Backend running on port ${port}`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
 
 bootstrap();
