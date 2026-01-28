@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo \"Starting Cricket Data Upload...\"\n\n# Check if backend is running\nif ! curl -s http://localhost:3001/cricket/health > /dev/null; then\n    echo \"Backend is not running. Please start it first with: npm run start:dev\"\n    exit 1\nfi\n\necho \"Backend is running. Uploading data...\"\n\n# Upload all CSV data\ncurl -X POST http://localhost:3001/cricket/upload-all \\\n  -H \"Content-Type: application/json\" \\\n  | jq .\n\necho \"\\nChecking database stats...\"\n\n# Check stats\ncurl -s http://localhost:3001/cricket/stats | jq .\n\necho \"\\nData upload completed!\"
