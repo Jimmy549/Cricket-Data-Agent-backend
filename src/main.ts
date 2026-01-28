@@ -8,9 +8,7 @@ async function bootstrap() {
   // Enable CORS for frontend
   app.enableCors({
     origin: [
-      process.env.CORS_ORIGIN || 'http://localhost:3000',
-      'https://cricket-data-agent-frontend-henna.vercel.app',
-      'http://localhost:3000'
+      process.env.CORS_ORIGIN ||
     ],
     credentials: true,
   });
