@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Player, PlayerDocument } from '../schemas/player.schema';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { MemoryService } from './memory.service';
 
 interface WorkflowTrace {
   nodeId: string;
@@ -21,6 +22,7 @@ export class LanggraphService {
 
   constructor(
     @InjectModel(Player.name) private playerModel: Model<PlayerDocument>,
+    private memoryService: MemoryService,
   ) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -34,7 +36,7 @@ export class LanggraphService {
         configuration: {
           baseURL: 'https://openrouter.ai/api/v1',
           defaultHeaders: {
-            'HTTP-Referer': 'http://localhost:3001',
+            'HTTP-Referer': 'https://cricket-data-agent-backend.onrender.com',
             'X-Title': 'Cricket Data Agent'
           }
         }
@@ -62,7 +64,7 @@ export class LanggraphService {
     });
   }
 
-  async processQuestion(question: string): Promise<any> {
+  async processQuestion(question: string, userId: string = 'default'): Promise<any> {
     this.workflowTrace = [];
     
     const isRelevant = await this.checkRelevancy(question);
@@ -75,9 +77,13 @@ export class LanggraphService {
       };
     }
 
-    const mongoQuery = await this.generateQuery(question);
+    const memory = await this.retrieveMemory(userId);
+    const mongoQuery = await this.generateQuery(question, memory);
     const results = await this.executeQuery(mongoQuery);
     const formattedAnswer = await this.formatAnswer(question, results, mongoQuery);
+    
+    // Save conversation to memory
+    await this.saveMemory(userId, question, formattedAnswer);
     
     return this.finalResponse(formattedAnswer);
   }
@@ -116,27 +122,51 @@ export class LanggraphService {
     }
   }
 
-  private async generateQuery(question: string): Promise<any> {
+  private async retrieveMemory(userId: string): Promise<string> {
+    try {
+      const memory = await this.memoryService.getMemory(userId);
+      
+      this.workflowTrace.push({
+        nodeId: '2',
+        nodeName: 'Memory Retriever',
+        usedLLM: false,
+        input: { userId },
+        output: memory ? 'Memory retrieved' : 'No memory found',
+        timestamp: new Date()
+      });
+      
+      return memory;
+    } catch (error) {
+      console.error('Memory retrieval error:', error);
+      return '';
+    }
+  }
+
+  private async generateQuery(question: string, memory: string = ''): Promise<any> {
     try {
       if (!this.llm) {
         this.llm = this.initializeLLM();
       }
       
       const prompt = PromptTemplate.fromTemplate(
-        `Convert to MongoDB query. Return ONLY valid JSON:
+        `Convert to MongoDB query using current question and conversation memory. Return ONLY valid JSON:
         
-        Question: {question}
+        Current Question: {question}
+        
+        Conversation Memory: {memory}
         
         Examples:
         "babar azam" -> {{"type":"find","filter":{{"name":{{"$regex":"Babar","$options":"i"}}}},"sort":{{"runs":-1}},"limit":5}}
         "highest scores" -> {{"type":"find","filter":{{}},"sort":{{"runs":-1}},"limit":5}}
         "kohli" -> {{"type":"find","filter":{{"name":{{"$regex":"Kohli","$options":"i"}}}},"sort":{{"runs":-1}},"limit":5}}
         
+        Use memory context to understand references like "and what about Test cricket?" or "same player in ODI".
+        
         Return JSON only:`
       );
       
       const chain = prompt.pipe(this.llm);
-      const response = await chain.invoke({ question });
+      const response = await chain.invoke({ question, memory });
       
       let responseText = response.content.toString().trim();
       
@@ -155,10 +185,10 @@ export class LanggraphService {
       const queryObj = JSON.parse(responseText);
       
       this.workflowTrace.push({
-        nodeId: '2',
+        nodeId: '3',
         nodeName: 'Query Generator',
         usedLLM: true,
-        input: question,
+        input: { question, memory },
         output: queryObj,
         timestamp: new Date()
       });
@@ -321,9 +351,36 @@ export class LanggraphService {
     };
   }
 
+  private async saveMemory(userId: string, question: string, formattedAnswer: any): Promise<void> {
+    try {
+      const answerText = formattedAnswer.format === 'table' 
+        ? `Table with ${formattedAnswer.data?.length || 0} results`
+        : formattedAnswer.data || formattedAnswer.message;
+      
+      await this.memoryService.saveConversation(
+        userId, 
+        question, 
+        answerText, 
+        formattedAnswer.format,
+        formattedAnswer.data
+      );
+      
+      this.workflowTrace.push({
+        nodeId: '6',
+        nodeName: 'Memory Saver',
+        usedLLM: false,
+        input: { userId, question, answer: answerText },
+        output: 'Conversation saved to memory',
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Memory save error:', error);
+    }
+  }
+
   private finalResponse(formattedAnswer: any): any {
     this.workflowTrace.push({
-      nodeId: '5',
+      nodeId: '7',
       nodeName: 'Final Response',
       usedLLM: false,
       input: formattedAnswer,

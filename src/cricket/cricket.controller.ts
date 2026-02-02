@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param, HttpException, HttpStatus, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { LanggraphService } from './services/langgraph.service';
 import { UploadService } from './services/upload.service';
+import { MemoryService } from './services/memory.service';
 import { AskQuestionDto, QueryResponseDto } from './dto/cricket.dto';
 
 @Controller('cricket')
@@ -9,10 +10,11 @@ export class CricketController {
   constructor(
     private readonly langgraphService: LanggraphService,
     private readonly uploadService: UploadService,
+    private readonly memoryService: MemoryService,
   ) {}
 
   @Post('ask')
-  async askQuestion(@Body() askQuestionDto: AskQuestionDto): Promise<QueryResponseDto> {
+  async askQuestion(@Body() askQuestionDto: AskQuestionDto, @Query('userId') userId?: string): Promise<QueryResponseDto> {
     // Validate input
     if (!askQuestionDto.question || askQuestionDto.question.trim().length === 0) {
       throw new HttpException(
@@ -30,7 +32,8 @@ export class CricketController {
 
     try {
       const result = await this.langgraphService.processQuestion(
-        askQuestionDto.question.trim()
+        askQuestionDto.question.trim(),
+        userId || 'default'
       );
       return result;
     } catch (error) {
@@ -108,7 +111,59 @@ export class CricketController {
     }
   }
 
-  @Get('health')
+  @Get('history/:userId')
+  async getHistory(@Param('userId') userId: string, @Query('limit') limit?: string): Promise<any> {
+    try {
+      const conversations = await this.memoryService.getConversationHistory(
+        userId, 
+        limit ? parseInt(limit) : 50
+      );
+      return {
+        success: true,
+        data: conversations,
+        count: conversations.length
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error getting history: ${error.message}`
+      };
+    }
+  }
+
+  @Get('summary/:userId')
+  async getSummary(@Param('userId') userId: string): Promise<any> {
+    try {
+      const summary = await this.memoryService.getSummary(userId);
+      return {
+        success: true,
+        data: summary
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error getting summary: ${error.message}`
+      };
+    }
+  }
+
+  @Post('clear-memory/:userId')
+  async clearMemory(@Param('userId') userId: string): Promise<any> {
+    try {
+      await this.memoryService.clearMemory(userId);
+      return {
+        success: true,
+        message: 'Memory cleared successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error clearing memory: ${error.message}`
+      };
+    }
+  }
+
+  @Get('health'))
   async healthCheck(): Promise<any> {
     return {
       success: true,
