@@ -19,6 +19,8 @@ async function bootstrap() {
   
   // Enable validation
   app.useGlobalPipes(new ValidationPipe());
+  // Make sure passport can attach req.user cleanly
+  // (we're using guards on protected endpoints)
   
   const port = process.env.PORT || 3001;
   await app.listen(port);

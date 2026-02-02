@@ -19,6 +19,4 @@ export class Summary {
 }
 
 export const SummarySchema = SchemaFactory.createForClass(Summary);
-
-// Create index for user lookup
-SummarySchema.index({ userId: 1 });
+// Note: `unique: true` on `userId` already creates an index; avoid duplicate index warnings.

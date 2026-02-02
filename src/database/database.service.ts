@@ -18,14 +18,9 @@ export class DatabaseService implements OnModuleInit {
     this.logger.log('🏏 Starting database initialization...');
     
     try {
-      const count = await this.playerModel.countDocuments();
-      
-      if (count === 0) {
-        this.logger.log('📊 No data found. Loading CSV data...');
-        await this.loadAllCsvData();
-      } else {
-        this.logger.log(`✅ Database already has ${count} records`);
-      }
+      // Force refresh - always reload CSV data
+      this.logger.log('🔄 Force refreshing database with latest CSV data...');
+      await this.loadAllCsvData();
     } catch (error) {
       this.logger.error(`❌ Database initialization failed: ${error.message}`);
     }
@@ -42,7 +37,11 @@ export class DatabaseService implements OnModuleInit {
   }
 
   private async loadCsvFormat(format: string): Promise<void> {
-    const csvPath = path.join(__dirname, '../../datasets', `${format}_players.csv`);
+    // Resolve datasets path reliably across:
+    // - dev (`nest start --watch`) where cwd is project root
+    // - prod (`node dist/main`) where cwd is also typically project root
+    const projectRoot = process.cwd();
+    const csvPath = path.join(projectRoot, 'datasets', `${format}_players.csv`);
     
     if (!fs.existsSync(csvPath)) {
       this.logger.warn(`⚠️ CSV file not found: ${csvPath}`);
@@ -116,15 +115,26 @@ export class DatabaseService implements OnModuleInit {
         })
         .on('end', async () => {
           try {
-            await this.playerModel.deleteMany({ format });
+            // Clear existing data for this format
+            const deletedCount = await this.playerModel.deleteMany({ format });
+            this.logger.log(`🗑️ Deleted ${deletedCount.deletedCount} existing ${format.toUpperCase()} records`);
             
             if (players.length > 0) {
               await this.playerModel.insertMany(players);
               this.logger.log(`✅ Loaded ${players.length} ${format.toUpperCase()} players`);
+              
+              // Log sample data for verification
+              const samplePlayer = players.find(p => p.name?.toLowerCase().includes('babar'));
+              if (samplePlayer) {
+                this.logger.log(`📋 Sample ${format} player: ${samplePlayer.name} - ${samplePlayer.runs} runs`);
+              }
+            } else {
+              this.logger.warn(`⚠️ No valid players found in ${format} CSV`);
             }
             
             resolve();
           } catch (error) {
+            this.logger.error(`❌ Error loading ${format} data:`, error);
             reject(error);
           }
         })

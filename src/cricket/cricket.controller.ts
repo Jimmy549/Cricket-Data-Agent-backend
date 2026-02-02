@@ -1,9 +1,11 @@
-import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param, HttpException, HttpStatus, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseInterceptors, UploadedFile, Param, HttpException, HttpStatus, Query, Req, UseGuards } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { LanggraphService } from './services/langgraph.service';
 import { UploadService } from './services/upload.service';
 import { MemoryService } from './services/memory.service';
 import { AskQuestionDto, QueryResponseDto } from './dto/cricket.dto';
+import { randomUUID } from 'crypto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('cricket')
 export class CricketController {
@@ -13,8 +15,9 @@ export class CricketController {
     private readonly memoryService: MemoryService,
   ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post('ask')
-  async askQuestion(@Body() askQuestionDto: AskQuestionDto, @Query('userId') userId?: string): Promise<QueryResponseDto> {
+  async askQuestion(@Body() askQuestionDto: AskQuestionDto, @Req() req: any): Promise<QueryResponseDto> {
     // Validate input
     if (!askQuestionDto.question || askQuestionDto.question.trim().length === 0) {
       throw new HttpException(
@@ -31,10 +34,15 @@ export class CricketController {
     }
 
     try {
+      const reqId = randomUUID();
+      const effectiveUserId = req.user?.userId || 'unknown';
+      console.log(`🧾 /cricket/ask reqId=${reqId} userId=${effectiveUserId} q="${askQuestionDto.question.trim()}"`);
       const result = await this.langgraphService.processQuestion(
         askQuestionDto.question.trim(),
-        userId || 'default'
+        effectiveUserId,
+        reqId
       );
+      console.log(`✅ /cricket/ask reqId=${reqId} success=${result?.success} format=${result?.format}`);
       return result;
     } catch (error) {
       console.error('Controller Error:', error);
@@ -111,9 +119,11 @@ export class CricketController {
     }
   }
 
-  @Get('history/:userId')
-  async getHistory(@Param('userId') userId: string, @Query('limit') limit?: string): Promise<any> {
+  @UseGuards(JwtAuthGuard)
+  @Get('history')
+  async getHistory(@Req() req: any, @Query('limit') limit?: string): Promise<any> {
     try {
+      const userId = req.user?.userId;
       const conversations = await this.memoryService.getConversationHistory(
         userId, 
         limit ? parseInt(limit) : 50
@@ -131,9 +141,11 @@ export class CricketController {
     }
   }
 
-  @Get('summary/:userId')
-  async getSummary(@Param('userId') userId: string): Promise<any> {
+  @UseGuards(JwtAuthGuard)
+  @Get('summary')
+  async getSummary(@Req() req: any): Promise<any> {
     try {
+      const userId = req.user?.userId;
       const summary = await this.memoryService.getSummary(userId);
       return {
         success: true,
@@ -147,9 +159,11 @@ export class CricketController {
     }
   }
 
-  @Post('clear-memory/:userId')
-  async clearMemory(@Param('userId') userId: string): Promise<any> {
+  @UseGuards(JwtAuthGuard)
+  @Post('clear-memory')
+  async clearMemory(@Req() req: any): Promise<any> {
     try {
+      const userId = req.user?.userId;
       await this.memoryService.clearMemory(userId);
       return {
         success: true,

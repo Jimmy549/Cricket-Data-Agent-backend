@@ -77,10 +77,10 @@ export class MemoryService {
 
       await conversation.save();
 
-      // Check if we need to summarize (if more than 20 conversations)
+      // Check if we need to summarize (if more than 5 conversations)
       const conversationCount = await this.conversationModel.countDocuments({ userId });
       
-      if (conversationCount > 20) {
+      if (conversationCount > 5) {
         await this.summarizeAndCleanup(userId);
       }
     } catch (error) {
@@ -98,10 +98,10 @@ export class MemoryService {
         .sort({ timestamp: 1 })
         .exec();
 
-      if (conversations.length <= 10) return;
+      if (conversations.length <= 3) return;
 
-      // Take older conversations (keep last 5)
-      const conversationsToSummarize = conversations.slice(0, -5);
+      // Take older conversations (keep last 2)
+      const conversationsToSummarize = conversations.slice(0, -2);
       
       // Create summary text
       const conversationText = conversationsToSummarize
@@ -109,7 +109,7 @@ export class MemoryService {
         .join('\n\n');
 
       const prompt = PromptTemplate.fromTemplate(
-        `Summarize this cricket conversation history into key facts and context that would be useful for future questions. Keep it concise (max 200 words):
+        `Summarize this cricket conversation history into key facts and context that would be useful for future questions. Keep it concise (max 150 words):
 
 {conversations}
 
@@ -131,9 +131,11 @@ Summary:`
         { upsert: true }
       );
 
-      // Delete old conversations (keep last 5)
+      // Delete old conversations (keep last 2)
       const conversationIdsToDelete = conversationsToSummarize.map(conv => conv._id);
       await this.conversationModel.deleteMany({ _id: { $in: conversationIdsToDelete } });
+
+      console.log(`✅ Summarized ${conversationsToSummarize.length} conversations for user ${userId}`);
 
     } catch (error) {
       console.error('Summarization error:', error);
