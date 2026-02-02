@@ -163,7 +163,7 @@ export class CricketController {
     }
   }
 
-  @Get('health'))
+  @Get('health')
   async healthCheck(): Promise<any> {
     return {
       success: true,
